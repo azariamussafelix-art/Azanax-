@@ -1,0 +1,285 @@
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const fs = require('fs');
+
+const client = new Client({
+    authStrategy: new LocalAuth()
+});
+
+// Mensagens constantes
+const MENU_MESSAGE = `👋 Olá!
+
+1️⃣ Música 🎵  
+2️⃣ Ganhar dinheiro 💸  
+3️⃣ Suporte 👨‍💻  
+
+Digite o número 👇`;
+
+const INVALID_MESSAGE = `❗ Digite:
+
+1 para música 🎵  
+2 para ganhar dinheiro 💸  
+3 para suporte 👨‍💻`;
+
+const SUPPORT_MESSAGE = `👨‍💻 Suporte:
+
+Aguarde... vamos responder você em breve.`;
+
+const MONEY_MESSAGE = `💸 Ganhar dinheiro:
+
+👉 https://media1.placard.co.mz/redirect.aspx?pid=11506&bid=1723  
+👉 https://seulink2.com  
+
+Comece hoje 🚀`;
+
+// ⚙️ RESPOSTAS AUTOMÁTICAS PARA PERGUNTAS
+const RESPOSTAS_AUTOMATICAS = {
+    // Saudações
+    'oi': '👋 Olá! Bem-vindo ao AZAMAX BET! Como posso ajudar?',
+    'ola': '👋 Olá! Bem-vindo ao AZAMAX BET! Como posso ajudar?',
+    'oi tudo bem': '😊 Tudo bem sim! E com você? Como posso ajudar?',
+    'tudo bem': '😊 Tudo bem aqui! E com você? 😄',
+    
+    // Perguntas sobre o bot
+    'quem é você': '🤖 Sou o bot AZAMAX BET! Estou aqui para ajudar voc�� a ganhar dinheiro 💰',
+    'o que você faz': '🎯 Sou um bot que ajuda a encontrar oportunidades de ganho, músicas e suporte! 🚀',
+    'como funciona': '⚙️ Simples! Digite um número (1, 2 ou 3) para acessar as opções. Ou me faça uma pergunta!',
+    'qual é seu nome': '📝 Meu nome é AZAMAX BET BOT! 🤖',
+    
+    // Perguntas sobre ganhar dinheiro
+    'como ganho dinheiro': `💸 Fácil! Clique aqui:\n\n👉 https://media1.placard.co.mz/redirect.aspx?pid=11506&bid=1723\n\nDigite 2 para mais opções! 🚀`,
+    'como faço para ganhar': `💰 Acesse nossos links:\n\n👉 https://media1.placard.co.mz/redirect.aspx?pid=11506&bid=1723\n👉 https://seulink2.com\n\nComece agora! 🚀`,
+    'qual é o link': `🔗 Aqui está o link:\n\nhttps://media1.placard.co.mz/redirect.aspx?pid=11506&bid=1723\n\n💰 Comece a ganhar agora!`,
+    'é verdade que ganho dinheiro': `✅ Sim! Muitas pessoas já estão ganhando:\n\nhttps://media1.placard.co.mz/redirect.aspx?pid=11506&bid=1723\n\nClique e veja! 🚀`,
+    
+    // Perguntas sobre musica
+    'você toca musica': '🎵 Não toco, mas encontro! Digite "musica [nome da música]" que te envio um link 🎧',
+    'como buscar musica': '🎵 Fácil! Digite: musica [nome da música]\n\nExemplo: musica despacito',
+    'qual é minha musica favorita': '🎵 Essa só você sabe! Mas posso buscar qualquer uma que quiser 😄',
+    
+    // Perguntas gerais
+    'obrigado': '���� De nada! Estou sempre aqui para ajudar! 🙌',
+    'obrigada': '😊 De nada! Estou sempre aqui para ajudar! 🙌',
+    'valeu': '✌️ Valeu! Volte sempre! 😄',
+    'até logo': '👋 Até logo! Volte em breve! 🚀',
+    'bye': '👋 Tchau! Até a próxima! 😄',
+    'cya': '👋 Até mais! 😄',
+    
+    // Perguntas técnicas
+    'como você funciona': '⚙️ Sou um bot automático que responde mensagens 24/7! Sempre disponível para ajudar 🤖',
+    'você é um bot': '✅ Sim! Sou um bot automático criado para ajudar você! 🤖',
+    'é automático': '✅ Sim! Respondo automaticamente! Sem espera 🚀',
+    'demora quanto': '⚡ Respondo na hora! Sem demora! ⚡',
+    
+    // Negativos
+    'não funciona': '😞 Desculpe! Qual é o problema? Tente novamente ou digite "3" para suporte',
+    'não entendi': '🤔 Tente novamente ou digite:\n\n1 para música 🎵\n2 para ganhar dinheiro 💸\n3 para suporte 👨‍💻',
+    'quebrou': '😞 Desculpe! Tente novamente. Se persistir, digite "3" para suporte',
+    'erro': '❌ Ocorreu um erro. Tente novamente!',
+};
+
+const CONTACTED_FILE = 'contacted_users.json';
+
+// ⚙️ CONFIGURAÇÕES
+const NOME_CHANNEL = 'AZAMAX'; // Nome do seu channel
+const ENVIAR_MENSAGEM_INIT = true; // true = envia mensagem ao iniciar, false = não envia
+
+function loadContactedUsers() {
+    try {
+        if (fs.existsSync(CONTACTED_FILE)) {
+            return JSON.parse(fs.readFileSync(CONTACTED_FILE, 'utf8'));
+        }
+    } catch (error) {
+        console.error('Erro ao carregar usuários contatados:', error);
+    }
+    return [];
+}
+
+function saveContactedUsers(users) {
+    try {
+        fs.writeFileSync(CONTACTED_FILE, JSON.stringify(users, null, 2));
+    } catch (error) {
+        console.error('Erro ao salvar usuários contatados:', error);
+    }
+}
+
+// Função para encontrar resposta automática
+function encontrarResposta(mensagem) {
+    const msg = mensagem.toLowerCase().trim();
+    
+    // Procurar correspondência exata
+    if (RESPOSTAS_AUTOMATICAS[msg]) {
+        return RESPOSTAS_AUTOMATICAS[msg];
+    }
+    
+    // Procurar por palavras-chave
+    for (const [chave, resposta] of Object.entries(RESPOSTAS_AUTOMATICAS)) {
+        if (msg.includes(chave)) {
+            return resposta;
+        }
+    }
+    
+    return null;
+}
+
+// ✅ FUNÇÃO PARA ENVIAR MENSAGEM NO CHANNEL
+async function enviarMensagemNoChannel(mensagem) {
+    try {
+        const chats = await client.getChats();
+        console.log(`📊 Total de chats: ${chats.length}`);
+        
+        for (const chat of chats) {
+            console.log(`🔍 Analisando: ${chat.name} (isGroup: ${chat.isGroup})`);
+            
+            // Procurar pelo channel pelo nome
+            if (chat.name && chat.name.toLowerCase().includes(NOME_CHANNEL.toLowerCase())) {
+                console.log(`✅ Channel encontrado: ${chat.name}`);
+                
+                await chat.sendMessage(mensagem);
+                console.log(`✅ Mensagem enviada no Channel: ${chat.name}`);
+                return true;
+            }
+        }
+        
+        console.log(`❌ Channel "${NOME_CHANNEL}" não encontrado!`);
+        return false;
+        
+    } catch (error) {
+        console.error('❌ Erro ao enviar mensagem no channel:', error);
+        return false;
+    }
+}
+
+let contactedUsers = loadContactedUsers();
+
+// QR Code Event
+client.on('qr', qr => {
+    console.log('📱 Escaneie o QR Code abaixo com seu WhatsApp:');
+    qrcode.generate(qr, { small: true });
+});
+
+// Ready Event
+client.on('ready', async () => {
+    console.log('✅ Bot está pronto!');
+    console.log('⏰ Horário:', new Date().toLocaleString('pt-BR'));
+    console.log('📢 Conectado ao WhatsApp Channel!');
+    
+    // Enviar mensagem no channel ao iniciar (opcional)
+    if (ENVIAR_MENSAGEM_INIT) {
+        console.log('📤 Enviando mensagem inicial ao channel...');
+        const mensagemInit = `🎉 Bot AZAMAX BET Online! 🤖
+
+Olá pessoal! O bot está ativo e pronto para ajudar! 
+
+💰 Ganhe dinheiro agora:
+👉 https://media1.placard.co.mz/redirect.aspx?pid=11506&bid=1723
+
+Dirija-se em DM para mais informações! 📩`;
+        
+        await enviarMensagemNoChannel(mensagemInit);
+    }
+});
+
+// Message Handler - Responde em Chats normais E WhatsApp Channel
+client.on('message', async message => {
+    const msg = message.body.toLowerCase().trim();
+    const userId = message.from;
+    const isChannel = message.isFromMe === false && message.chatId.includes('@broadcast');
+    const isBroadcast = message.broadcast;
+
+    try {
+        console.log(`📨 Mensagem recebida ${isChannel ? '[CHANNEL]' : '[CHAT]'}: ${msg}`);
+        
+        // MENU
+        if (msg === 'menu') {
+            await message.reply(MENU_MESSAGE);
+            return;
+        }
+        
+        // OPÇÃO 1 - MÚSICA
+        if (msg === '1' || msg.startsWith('musica ')) {
+            if (msg === '1') {
+                await message.reply(`🎵 Digite a música que deseja:\n\nExemplo: musica despacito`);
+            } else {
+                const songName = msg.replace('musica ', '').trim();
+                
+                if (songName.length === 0) {
+                    await message.reply(`🎵 Use assim: "musica [nome da música]"`);
+                    return;
+                }
+
+                const link = `https://www.youtube.com/results?search_query=${encodeURIComponent(songName)}`;
+                await message.reply(`🎧 Aqui está sua música:\n${link}`);
+                console.log(`🎵 Música procurada: ${songName}`);
+            }
+            return;
+        }
+        
+        // OPÇÃO 2 - GANHAR DINHEIRO
+        if (msg === '2') {
+            await message.reply(MONEY_MESSAGE);
+            console.log(`💰 Usuário acessou links de ganhar dinheiro`);
+            return;
+        }
+        
+        // OPÇÃO 3 - SUPORTE
+        if (msg === '3') {
+            await message.reply(SUPPORT_MESSAGE);
+            console.log(`📞 Usuário solicitou suporte`);
+            return;
+        }
+        
+        // Procurar por resposta automática
+        const resposta = encontrarResposta(msg);
+        if (resposta) {
+            await message.reply(resposta);
+            console.log(`💬 Resposta automática enviada: ${msg} ${isChannel ? '[CHANNEL]' : '[CHAT]'}`);
+            return;
+        }
+        
+        // Se não encontrar resposta, enviar menu padrão
+        await message.reply(INVALID_MESSAGE);
+        
+    } catch (error) {
+        console.error('❌ Erro ao processar mensagem:', error);
+        try {
+            await message.reply('❌ Desculpe, ocorreu um erro. Tente novamente.');
+        } catch (replyError) {
+            console.error('❌ Erro ao enviar resposta de erro:', replyError);
+        }
+    }
+});
+
+// Evento específico para mensagens de canal
+client.on('message_create', async message => {
+    try {
+        // Verificar se é mensagem de channel/broadcast
+        if (message.isFromMe === false && (message.chatId.includes('@broadcast') || message.broadcast)) {
+            const msg = message.body.toLowerCase().trim();
+            
+            console.log(`📢 [CHANNEL MESSAGE] ${msg}`);
+            
+            // Enviar resposta automática no channel
+            const resposta = encontrarResposta(msg);
+            if (resposta) {
+                await message.reply(resposta);
+                console.log(`✅ Resposta enviada no Channel`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Erro ao processar mensagem de channel:', error);
+    }
+});
+
+// Error Handler
+client.on('error', error => {
+    console.error('❌ Erro do cliente:', error);
+});
+
+// Disconnect Handler
+client.on('disconnected', reason => {
+    console.log('⚠️ Cliente desconectado:', reason);
+});
+
+// Inicializar cliente
+client.initialize();
